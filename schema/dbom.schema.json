@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://makoto.dev/schema/dbom/v0.1",
+  "title": "Data Bill of Materials (DBOM)",
+  "description": "Aggregate document referencing origin and transform attestations for a data artifact.",
+  "type": "object",
+  "required": ["dbomVersion", "dataset", "sources"],
+  "properties": {
+    "dbomVersion": {
+      "type": "string",
+      "description": "DBOM specification version",
+      "const": "1.0.0"
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["name", "version", "makotoLevel"],
+      "properties": {
+        "name": { "type": "string", "description": "Name of the dataset" },
+        "version": { "type": "string", "description": "Version of the dataset" },
+        "created": { "type": "string", "format": "date-time" },
+        "makotoLevel": {
+          "type": "string",
+          "enum": ["L1", "L2", "L3"],
+          "description": "Makoto assurance level"
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "attestationRef"],
+        "properties": {
+          "name": { "type": "string", "description": "Name of the source dataset" },
+          "attestationRef": { "type": "string", "description": "URI or path to the origin attestation" },
+          "makotoLevel": { "type": "string", "enum": ["L1", "L2", "L3"] },
+          "geography": { "type": "string" },
+          "license": { "type": "string" }
+        }
+      }
+    },
+    "transformations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["order", "name", "attestationRef"],
+        "properties": {
+          "order": { "type": "integer", "minimum": 1, "description": "Order in the transformation chain" },
+          "name": { "type": "string", "description": "Human-readable name of the transformation" },
+          "attestationRef": { "type": "string", "description": "URI or path to the transform attestation" }
+        }
+      }
+    }
+  }
+}

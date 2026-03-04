@@ -183,3 +183,9 @@ status:
     #!/usr/bin/env bash
     cd "{{invdir}}"
     {{python}} {{scripts}}/status.py {{data_dir}} {{dboms_dir}}
+
+# --- Test ---
+
+# Run the test suite
+test:
+    @just --justfile {{root}}/tests/Justfile all

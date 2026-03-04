@@ -1,0 +1,301 @@
+# DBOM CLI Test Suite
+#
+# Run all tests:  just --justfile tests/Justfile
+# Run one test:   just --justfile tests/Justfile test-generate
+#
+# Each test creates an isolated temp directory, runs the recipe under test,
+# asserts expected outcomes, then cleans up.
+
+root := justfile_directory()
+dbom := parent_directory(root) / "Justfile"
+fixtures := root / "fixtures"
+helpers := root
+python := env("DBOM_PYTHON", "python3")
+
+pass_marker := "/tmp/dbom-test-pass"
+fail_marker := "/tmp/dbom-test-fail"
+
+# List available test recipes
+default:
+    @just --justfile {{root}}/Justfile --list
+
+# Run all tests
+all: setup test-default test-generate test-generate-json test-validate test-validate-all test-generate-all-skip test-fetch test-generate-external test-transform test-status test-lineage test-gate-both test-gate-only test-validate-tampered test-schema-check test-gate-missing-dbom teardown
+    #!/usr/bin/env bash
+    pass=$(cat {{pass_marker}} 2>/dev/null || echo 0)
+    fail=$(cat {{fail_marker}} 2>/dev/null || echo 0)
+    total=$((pass + fail))
+    echo ""
+    echo "════════════════════════════════════════"
+    if [ "$fail" -eq 0 ]; then
+        echo "✓ All ${total} tests passed"
+    else
+        echo "✗ ${pass}/${total} passed, ${fail} failed"
+    fi
+    echo "════════════════════════════════════════"
+    rm -f {{pass_marker}} {{fail_marker}}
+    [ "$fail" -eq 0 ]
+
+[private]
+setup:
+    @echo 0 > {{pass_marker}} && echo 0 > {{fail_marker}}
+
+[private]
+teardown:
+    @true
+
+[private]
+mkenv name:
+    #!/usr/bin/env bash
+    dir="/tmp/dbom-test-{{name}}"
+    rm -rf "$dir"
+    mkdir -p "$dir/data/local" "$dir/data/external" "$dir/dboms" "$dir/attestations"
+    echo "$dir"
+
+# --- Tests ---
+
+# T01: just default lists recipes
+test-default:
+    #!/usr/bin/env bash
+    echo "▸ test-default: list recipes"
+    output=$(cd /tmp && just --justfile {{dbom}} 2>&1)
+    if echo "$output" | grep -q "generate" && echo "$output" | grep -q "validate" && echo "$output" | grep -q "gate"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — missing expected recipes"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+
+# T02: generate origin attestation + DBOM for a CSV
+test-generate:
+    #!/usr/bin/env bash
+    echo "▸ test-generate: single CSV file"
+    dir=$(just --justfile {{root}}/Justfile mkenv generate)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    if [ ! -f "$dir/attestations/test-data.origin.json" ] || [ ! -f "$dir/dboms/test-data.dbom.json" ]; then
+        echo "  ✗ fail — output files missing"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        rm -rf "$dir"; exit 0
+    fi
+    if {{python}} {{helpers}}/check_structure.py "$dir/attestations/test-data.origin.json" "$dir/dboms/test-data.dbom.json" > /dev/null 2>&1; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — invalid in-toto/DBOM structure"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T03: generate for a JSON file
+test-generate-json:
+    #!/usr/bin/env bash
+    echo "▸ test-generate-json: JSON file"
+    dir=$(just --justfile {{root}}/Justfile mkenv genjson)
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
+    if [ -f "$dir/dboms/config.dbom.json" ]; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — DBOM not created"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T04: validate a single DBOM
+test-validate:
+    #!/usr/bin/env bash
+    echo "▸ test-validate: single DBOM"
+    dir=$(just --justfile {{root}}/Justfile mkenv validate)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    if cd "$dir" && just --justfile {{dbom}} validate dboms/test-data.dbom.json > /dev/null 2>&1; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — validation returned non-zero"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T05: validate-all
+test-validate-all:
+    #!/usr/bin/env bash
+    echo "▸ test-validate-all: multiple DBOMs"
+    dir=$(just --justfile {{root}}/Justfile mkenv valall)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} validate-all 2>&1)
+    if echo "$output" | grep -q "2/2 DBOM(s) passed"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — expected 2/2 passed"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T06: generate-all skips existing DBOMs
+test-generate-all-skip:
+    #!/usr/bin/env bash
+    echo "▸ test-generate-all-skip: skip existing"
+    dir=$(just --justfile {{root}}/Justfile mkenv genallskip)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} generate-all 2>&1)
+    if echo "$output" | grep -q "already have DBOMs"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — should report all assets have DBOMs"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T07: fetch external datasets
+test-fetch:
+    #!/usr/bin/env bash
+    echo "▸ test-fetch: external datasets"
+    dir=$(just --justfile {{root}}/Justfile mkenv fetch)
+    cp {{fixtures}}/sources.yaml "$dir/data/external/"
+    cd "$dir" && just --justfile {{dbom}} fetch > /dev/null 2>&1
+    if [ -f "$dir/data/external/iris.csv" ]; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — iris.csv not downloaded"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T08: generate for a fetched external file
+test-generate-external:
+    #!/usr/bin/env bash
+    echo "▸ test-generate-external: fetched file"
+    dir=$(just --justfile {{root}}/Justfile mkenv genext)
+    cp {{fixtures}}/sources.yaml "$dir/data/external/"
+    cd "$dir" && just --justfile {{dbom}} fetch > /dev/null 2>&1
+    cd "$dir" && just --justfile {{dbom}} generate data/external/iris.csv > /dev/null 2>&1
+    if [ -f "$dir/dboms/iris.dbom.json" ] && [ -f "$dir/attestations/iris.origin.json" ]; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — DBOM/attestation not created for iris"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T09: transform a dataset
+test-transform:
+    #!/usr/bin/env bash
+    echo "▸ test-transform: dataset transformation"
+    dir=$(just --justfile {{root}}/Justfile mkenv transform)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{dbom}} transform data/local/test-data.csv > /dev/null 2>&1
+    if [ -f "$dir/attestations/test-data_filtered.transform.json" ]; then
+        if {{python}} {{helpers}}/check_transform.py "$dir/attestations/test-data_filtered.transform.json" > /dev/null 2>&1; then
+            echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+        else
+            echo "  ✗ fail — invalid transform attestation"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        fi
+    else
+        echo "  ✗ fail — transform attestation not created"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T10: status table
+test-status:
+    #!/usr/bin/env bash
+    echo "▸ test-status: summary table"
+    dir=$(just --justfile {{root}}/Justfile mkenv status)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} status 2>&1)
+    if echo "$output" | grep -q "test-data" && echo "$output" | grep -q "config" && echo "$output" | grep -q "DBOM Status Summary"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — status table missing expected content"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T11: lineage chain
+test-lineage:
+    #!/usr/bin/env bash
+    echo "▸ test-lineage: lineage chain"
+    dir=$(just --justfile {{root}}/Justfile mkenv lineage)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} lineage dboms/test-data.dbom.json 2>&1)
+    if echo "$output" | grep -q "origin: dataset:test-data"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — lineage missing origin entry"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T12: gate mode=both (full pipeline from scratch)
+test-gate-both:
+    #!/usr/bin/env bash
+    echo "▸ test-gate-both: full pipeline"
+    dir=$(just --justfile {{root}}/Justfile mkenv gateboth)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cp {{fixtures}}/sources.yaml "$dir/data/external/"
+    output=$(cd "$dir" && just --justfile {{dbom}} gate both 2>&1)
+    if echo "$output" | grep -q "3/3 DBOM(s) passed" && echo "$output" | grep -q "All assets have DBOMs"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — expected 3/3 pass with coverage check"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T13: gate mode=gate (all valid)
+test-gate-only:
+    #!/usr/bin/env bash
+    echo "▸ test-gate-only: gate with all DBOMs present"
+    dir=$(just --justfile {{root}}/Justfile mkenv gateonly)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} gate gate 2>&1)
+    if echo "$output" | grep -q "2/2 DBOM(s) passed" && echo "$output" | grep -q "Skipped (gate-only mode)"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — expected 2/2 pass in gate-only mode"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T14: validate detects tampered hash
+test-validate-tampered:
+    #!/usr/bin/env bash
+    echo "▸ test-validate-tampered: detect hash mismatch"
+    dir=$(just --justfile {{root}}/Justfile mkenv tampered)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    {{python}} {{helpers}}/tamper_hash.py "$dir/attestations/test-data.origin.json" > /dev/null
+    output=$(cd "$dir" && just --justfile {{dbom}} validate dboms/test-data.dbom.json 2>&1)
+    exit_code=$?
+    if [ $exit_code -ne 0 ] && echo "$output" | grep -q "sha256 mismatch"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — should detect tampered hash (exit=$exit_code)"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"
+
+# T15: schema-check
+test-schema-check:
+    #!/usr/bin/env bash
+    echo "▸ test-schema-check: validate JSON schemas"
+    output=$(just --justfile {{dbom}} schema-check 2>&1)
+    if echo "$output" | grep -q "dbom.schema.json" && echo "$output" | grep -q "origin.schema.json" && echo "$output" | grep -q "transform.schema.json"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — not all schemas checked"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+
+# T16: gate mode=gate fails when asset missing DBOM
+test-gate-missing-dbom:
+    #!/usr/bin/env bash
+    echo "▸ test-gate-missing-dbom: fail on missing DBOM"
+    dir=$(just --justfile {{root}}/Justfile mkenv gatemissing)
+    cp {{fixtures}}/test-data.csv "$dir/data/local/"
+    cp {{fixtures}}/config.json "$dir/data/local/"
+    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{dbom}} gate gate 2>&1)
+    exit_code=$?
+    if [ $exit_code -ne 0 ] && echo "$output" | grep -q "config — no DBOM found"; then
+        echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
+    else
+        echo "  ✗ fail — should fail when config.json has no DBOM (exit=$exit_code)"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    fi
+    rm -rf "$dir"

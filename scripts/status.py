@@ -18,7 +18,7 @@ def main():
                 assets.append(os.path.join(dirpath, f))
 
     print("╔══════════════════════════════════════════════════════════╗")
-    print("║              DBOM Status Summary                        ║")
+    print("║                   DBOM Status Summary                    ║")
     print("╠══════════════════════════════════════════════════════════╣")
     print(f"║ {'Asset':<30} │ {'DBOM':<8} │ {'Level':<12} ║")
     print("╠══════════════════════════════════════════════════════════╣")

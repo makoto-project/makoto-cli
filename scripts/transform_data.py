@@ -98,11 +98,11 @@ def generate_transform_attestation(input_path, output_path, input_attestation_re
                 "version": "0.1.0",
                 "parameters": transform_params,
                 "codeRef": {
-                    "uri": "git+https://github.com/asw101/dbom@main#scripts/transform_data.py"
+                    "uri": "git+https://github.com/makoto-project/dbom@main#scripts/transform_data.py"
                 }
             },
             "executor": {
-                "id": "https://github.com/asw101/dbom",
+                "id": "https://github.com/makoto-project/dbom",
                 "platform": "local"
             },
             "metadata": {

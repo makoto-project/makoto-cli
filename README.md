@@ -2,7 +2,7 @@
 
 A CLI toolkit for generating, validating, and managing [Makoto](https://usemakoto.dev) **Data Bills of Materials (DBOMs)** — signed attestations that prove where your data came from and how it was transformed.
 
-Built as a [Justfile](https://github.com/casey/just) following the [asw101/justfiles](https://github.com/asw101/justfiles) pattern: clone it, alias it, use it from anywhere.
+Built as a [Justfile](https://github.com/casey/just) following the [makoto-project/justfiles](https://github.com/makoto-project/justfiles) pattern: clone it, alias it, use it from anywhere.
 
 ## Install
 
@@ -12,7 +12,7 @@ Built as a [Justfile](https://github.com/casey/just) following the [asw101/justf
 brew install just
 
 # Clone and alias
-git clone https://github.com/asw101/dbom.git ~/dbom
+git clone https://github.com/makoto-project/dbom.git ~/dbom
 echo "alias dbom='just --justfile ~/dbom/Justfile'" >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -66,7 +66,7 @@ dbom status
   "predicateType": "https://makoto.dev/origin/v1",
   "predicate": {
     "origin": { "source": "file://data/my-dataset.csv", "sourceType": "file" },
-    "collector": { "id": "https://github.com/asw101/dbom" },
+    "collector": { "id": "https://github.com/makoto-project/dbom" },
     "schema": { "format": "csv" }
   }
 }

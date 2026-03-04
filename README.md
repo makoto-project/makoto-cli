@@ -33,6 +33,7 @@ Available recipes:
     transform file *args                               # Transform a dataset and update DBOM lineage
     validate file                                      # Validate a single DBOM
     validate-all                                       # Validate all DBOMs in the dboms/ directory
+    test                                               # Run the test suite
 ```
 
 ## Quick Start
@@ -81,6 +82,20 @@ dbom status
   "transformations": []
 }
 ```
+
+## Testing
+
+The test suite lives in `tests/` and covers all 16 recipes with isolated temp directories per test:
+
+```bash
+# Run all tests
+dbom test
+
+# Or directly
+just --justfile tests/Justfile all
+```
+
+Tests include: generate (CSV + JSON), validate (single + all), generate-all (skip existing), fetch, transform, status, lineage, gate (both + gate-only), tampered hash detection, schema validation, and missing-DBOM gating.
 
 ## Configuration
 

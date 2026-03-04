@@ -148,8 +148,26 @@ gate mode="both":
         echo ""
     fi
 
-    # Step 4: Validate all
-    echo "▸ Step 4: Validating all DBOMs..."
+    # Step 4: Check coverage — every asset must have a DBOM
+    echo "▸ Step 4: Checking DBOM coverage..."
+    missing=0
+    for f in $(find {{data_dir}} -type f \( -name '*.csv' -o -name '*.json' -o -name '*.parquet' \) ! -name 'sources.yaml' 2>/dev/null | sort); do
+        name="$(basename "${f%.*}")"
+        if [ ! -f "{{dboms_dir}}/${name}.dbom.json" ]; then
+            echo "  ✗ ${name} — no DBOM found"
+            missing=$((missing + 1))
+        fi
+    done
+    if [ "$missing" -gt 0 ]; then
+        echo ""
+        echo "✗ ${missing} asset(s) missing DBOMs"
+        exit 1
+    fi
+    echo "  ✓ All assets have DBOMs"
+    echo ""
+
+    # Step 5: Validate all
+    echo "▸ Step 5: Validating all DBOMs..."
     {{python}} {{scripts}}/validate_dbom.py --all --dboms-dir {{dboms_dir}}
 
 # --- Info ---

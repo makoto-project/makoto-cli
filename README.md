@@ -97,6 +97,20 @@ just --justfile tests/Justfile all
 
 Tests include: generate (CSV + JSON), validate (single + all), generate-all (skip existing), fetch, transform, status, lineage, gate (both + gate-only), tampered hash detection, schema validation, and missing-DBOM gating.
 
+## GitHub Action
+
+Use makoto-cli from any workflow without cloning the repo via the composite
+action at [`.github/actions/generate`](.github/actions/generate/):
+
+```yaml
+- uses: actions/checkout@v4
+- uses: makoto-project/makoto-cli/.github/actions/generate@main
+  with:
+    file: data/training_set.csv
+```
+
+See the [action README](.github/actions/generate/README.md) for all inputs and outputs.
+
 ## Configuration
 
 Override defaults via environment variables:

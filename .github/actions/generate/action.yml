@@ -1,0 +1,94 @@
+name: 'Makoto DBOM Generator'
+description: 'Generate an in-toto Statement v1 origin attestation and Makoto DBOM document for a data artifact.'
+author: 'makoto-project'
+
+inputs:
+  file:
+    description: 'Path to the data file to generate the DBOM for'
+    required: true
+  attestations-dir:
+    description: 'Output directory for the origin attestation'
+    required: false
+    default: 'attestations'
+  dboms-dir:
+    description: 'Output directory for the DBOM document'
+    required: false
+    default: 'dboms'
+  source-type:
+    description: 'Source type recorded in the origin predicate (file, url, ...)'
+    required: false
+    default: 'file'
+  geography:
+    description: 'Geographic region of the data (e.g. US-WEST-2). Optional.'
+    required: false
+    default: ''
+  collector-id:
+    description: 'Collector identifier URI. Defaults to https://github.com/<repo>.'
+    required: false
+    default: ''
+  dataset-version:
+    description: 'Dataset version (semver-ish string).'
+    required: false
+    default: '1.0.0'
+  python-version:
+    description: 'Python version for the setup-python step.'
+    required: false
+    default: '3.12'
+
+outputs:
+  dbom-path:
+    description: 'Path to the generated DBOM JSON file'
+    value: ${{ steps.generate.outputs.dbom-path }}
+  attestation-path:
+    description: 'Path to the generated origin attestation JSON file'
+    value: ${{ steps.generate.outputs.attestation-path }}
+  sha256:
+    description: 'SHA-256 of the data file (from the attestation subject digest)'
+    value: ${{ steps.generate.outputs.sha256 }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Generate origin attestation + DBOM
+      id: generate
+      shell: bash
+      env:
+        ACT_FILE: ${{ inputs.file }}
+        ACT_ATTEST_DIR: ${{ inputs.attestations-dir }}
+        ACT_DBOMS_DIR: ${{ inputs.dboms-dir }}
+        ACT_SOURCE_TYPE: ${{ inputs.source-type }}
+        ACT_GEOGRAPHY: ${{ inputs.geography }}
+        ACT_COLLECTOR_ID: ${{ inputs.collector-id }}
+        ACT_VERSION: ${{ inputs.dataset-version }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        SCRIPT="${{ github.action_path }}/../../../scripts/generate_dbom.py"
+        CMD=(python3 "$SCRIPT" "$ACT_FILE"
+             --attestations-dir "$ACT_ATTEST_DIR"
+             --dboms-dir "$ACT_DBOMS_DIR"
+             --source-type "$ACT_SOURCE_TYPE"
+             --version "$ACT_VERSION")
+        [ -n "$ACT_GEOGRAPHY" ]   && CMD+=(--geography "$ACT_GEOGRAPHY")
+        if [ -n "$ACT_COLLECTOR_ID" ]; then
+          CMD+=(--collector-id "$ACT_COLLECTOR_ID")
+        else
+          CMD+=(--collector-id "https://github.com/${REPO}")
+        fi
+        "${CMD[@]}"
+
+        name=$(basename "$ACT_FILE")
+        name="${name%.*}"
+        dbom_path="$ACT_DBOMS_DIR/$name.dbom.json"
+        attestation_path="$ACT_ATTEST_DIR/$name.origin.json"
+        sha256=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['subject'][0]['digest']['sha256'])" "$attestation_path")
+        {
+          echo "dbom-path=$dbom_path"
+          echo "attestation-path=$attestation_path"
+          echo "sha256=$sha256"
+        } >> "$GITHUB_OUTPUT"

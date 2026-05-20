@@ -1,4 +1,4 @@
-# DBOM CLI Test Suite
+# makoto-cli Test Suite
 #
 # Run all tests:  just --justfile tests/Justfile
 # Run one test:   just --justfile tests/Justfile test-generate
@@ -7,13 +7,13 @@
 # asserts expected outcomes, then cleans up.
 
 root := justfile_directory()
-dbom := parent_directory(root) / "Justfile"
+makoto_cli := parent_directory(root) / "Justfile"
 fixtures := root / "fixtures"
 helpers := root
 python := env("DBOM_PYTHON", "python3")
 
-pass_marker := "/tmp/dbom-test-pass"
-fail_marker := "/tmp/dbom-test-fail"
+pass_marker := "/tmp/makoto-cli-test-pass"
+fail_marker := "/tmp/makoto-cli-test-fail"
 
 # List available test recipes
 default:
@@ -47,7 +47,7 @@ teardown:
 [private]
 mkenv name:
     #!/usr/bin/env bash
-    dir="/tmp/dbom-test-{{name}}"
+    dir="/tmp/makoto-cli-test-{{name}}"
     rm -rf "$dir"
     mkdir -p "$dir/data/local" "$dir/data/external" "$dir/dboms" "$dir/attestations"
     echo "$dir"
@@ -58,7 +58,7 @@ mkenv name:
 test-default:
     #!/usr/bin/env bash
     echo "▸ test-default: list recipes"
-    output=$(cd /tmp && just --justfile {{dbom}} 2>&1)
+    output=$(cd /tmp && just --justfile {{makoto_cli}} 2>&1)
     if echo "$output" | grep -q "generate" && echo "$output" | grep -q "validate" && echo "$output" | grep -q "gate"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -71,7 +71,7 @@ test-generate:
     echo "▸ test-generate: single CSV file"
     dir=$(just --justfile {{root}}/Justfile mkenv generate)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
     if [ ! -f "$dir/attestations/test-data.origin.json" ] || [ ! -f "$dir/dboms/test-data.dbom.json" ]; then
         echo "  ✗ fail — output files missing"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
         rm -rf "$dir"; exit 0
@@ -89,7 +89,7 @@ test-generate-json:
     echo "▸ test-generate-json: JSON file"
     dir=$(just --justfile {{root}}/Justfile mkenv genjson)
     cp {{fixtures}}/config.json "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/config.json > /dev/null 2>&1
     if [ -f "$dir/dboms/config.dbom.json" ]; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -103,8 +103,8 @@ test-validate:
     echo "▸ test-validate: single DBOM"
     dir=$(just --justfile {{root}}/Justfile mkenv validate)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    if cd "$dir" && just --justfile {{dbom}} validate dboms/test-data.dbom.json > /dev/null 2>&1; then
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    if cd "$dir" && just --justfile {{makoto_cli}} validate dboms/test-data.dbom.json > /dev/null 2>&1; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
         echo "  ✗ fail — validation returned non-zero"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
@@ -118,9 +118,9 @@ test-validate-all:
     dir=$(just --justfile {{root}}/Justfile mkenv valall)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cp {{fixtures}}/config.json "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} validate-all 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/config.json > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} validate-all 2>&1)
     if echo "$output" | grep -q "2/2 DBOM(s) passed"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -134,8 +134,8 @@ test-generate-all-skip:
     echo "▸ test-generate-all-skip: skip existing"
     dir=$(just --justfile {{root}}/Justfile mkenv genallskip)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} generate-all 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} generate-all 2>&1)
     if echo "$output" | grep -q "already have DBOMs"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -149,7 +149,7 @@ test-fetch:
     echo "▸ test-fetch: external datasets"
     dir=$(just --justfile {{root}}/Justfile mkenv fetch)
     cp {{fixtures}}/sources.yaml "$dir/data/external/"
-    cd "$dir" && just --justfile {{dbom}} fetch > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} fetch > /dev/null 2>&1
     if [ -f "$dir/data/external/iris.csv" ]; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -163,8 +163,8 @@ test-generate-external:
     echo "▸ test-generate-external: fetched file"
     dir=$(just --justfile {{root}}/Justfile mkenv genext)
     cp {{fixtures}}/sources.yaml "$dir/data/external/"
-    cd "$dir" && just --justfile {{dbom}} fetch > /dev/null 2>&1
-    cd "$dir" && just --justfile {{dbom}} generate data/external/iris.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} fetch > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/external/iris.csv > /dev/null 2>&1
     if [ -f "$dir/dboms/iris.dbom.json" ] && [ -f "$dir/attestations/iris.origin.json" ]; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -178,8 +178,8 @@ test-transform:
     echo "▸ test-transform: dataset transformation"
     dir=$(just --justfile {{root}}/Justfile mkenv transform)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    cd "$dir" && just --justfile {{dbom}} transform data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} transform data/local/test-data.csv > /dev/null 2>&1
     if [ -f "$dir/attestations/test-data_filtered.transform.json" ]; then
         if {{python}} {{helpers}}/check_transform.py "$dir/attestations/test-data_filtered.transform.json" > /dev/null 2>&1; then
             echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
@@ -198,8 +198,8 @@ test-status:
     dir=$(just --justfile {{root}}/Justfile mkenv status)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cp {{fixtures}}/config.json "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} status 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} status 2>&1)
     if echo "$output" | grep -q "test-data" && echo "$output" | grep -q "config" && echo "$output" | grep -q "DBOM Status Summary"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -213,8 +213,8 @@ test-lineage:
     echo "▸ test-lineage: lineage chain"
     dir=$(just --justfile {{root}}/Justfile mkenv lineage)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} lineage dboms/test-data.dbom.json 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} lineage dboms/test-data.dbom.json 2>&1)
     if echo "$output" | grep -q "origin: dataset:test-data"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -230,7 +230,7 @@ test-gate-both:
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cp {{fixtures}}/config.json "$dir/data/local/"
     cp {{fixtures}}/sources.yaml "$dir/data/external/"
-    output=$(cd "$dir" && just --justfile {{dbom}} gate both 2>&1)
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} gate both 2>&1)
     if echo "$output" | grep -q "3/3 DBOM(s) passed" && echo "$output" | grep -q "All assets have DBOMs"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -245,9 +245,9 @@ test-gate-only:
     dir=$(just --justfile {{root}}/Justfile mkenv gateonly)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cp {{fixtures}}/config.json "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    cd "$dir" && just --justfile {{dbom}} generate data/local/config.json > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} gate gate 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/config.json > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} gate gate 2>&1)
     if echo "$output" | grep -q "2/2 DBOM(s) passed" && echo "$output" | grep -q "Skipped (gate-only mode)"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -261,9 +261,9 @@ test-validate-tampered:
     echo "▸ test-validate-tampered: detect hash mismatch"
     dir=$(just --justfile {{root}}/Justfile mkenv tampered)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
     {{python}} {{helpers}}/tamper_hash.py "$dir/attestations/test-data.origin.json" > /dev/null
-    output=$(cd "$dir" && just --justfile {{dbom}} validate dboms/test-data.dbom.json 2>&1)
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} validate dboms/test-data.dbom.json 2>&1)
     exit_code=$?
     if [ $exit_code -ne 0 ] && echo "$output" | grep -q "sha256 mismatch"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
@@ -276,7 +276,7 @@ test-validate-tampered:
 test-schema-check:
     #!/usr/bin/env bash
     echo "▸ test-schema-check: validate JSON schemas"
-    output=$(just --justfile {{dbom}} schema-check 2>&1)
+    output=$(just --justfile {{makoto_cli}} schema-check 2>&1)
     if echo "$output" | grep -q "dbom.schema.json" && echo "$output" | grep -q "origin.schema.json" && echo "$output" | grep -q "transform.schema.json"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
@@ -290,8 +290,8 @@ test-gate-missing-dbom:
     dir=$(just --justfile {{root}}/Justfile mkenv gatemissing)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cp {{fixtures}}/config.json "$dir/data/local/"
-    cd "$dir" && just --justfile {{dbom}} generate data/local/test-data.csv > /dev/null 2>&1
-    output=$(cd "$dir" && just --justfile {{dbom}} gate gate 2>&1)
+    cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
+    output=$(cd "$dir" && just --justfile {{makoto_cli}} gate gate 2>&1)
     exit_code=$?
     if [ $exit_code -ne 0 ] && echo "$output" | grep -q "config — no DBOM found"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}

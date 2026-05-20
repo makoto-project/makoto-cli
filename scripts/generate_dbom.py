@@ -69,8 +69,8 @@ def generate_origin_attestation(file_path, source_type="file", geography=None,
                 "collectionTimestamp": now,
             },
             "collector": {
-                "id": collector_id or "https://github.com/makoto-project/dbom",
-                "version": {"dbom-cli": collector_version or "0.1.0"}
+                "id": collector_id or "https://github.com/makoto-project/makoto-cli",
+                "version": {"makoto-cli": collector_version or "0.1.0"}
             },
             "schema": {
                 "format": ext or "unknown"

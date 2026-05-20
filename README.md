@@ -1,4 +1,4 @@
-# dbom
+# makoto-cli
 
 A CLI toolkit for generating, validating, and managing [Makoto](https://usemakoto.dev) **Data Bills of Materials (DBOMs)** — signed attestations that prove where your data came from and how it was transformed.
 
@@ -12,15 +12,15 @@ Built as a [Justfile](https://github.com/casey/just) following the [makoto-proje
 brew install just
 
 # Clone and alias
-git clone https://github.com/makoto-project/dbom.git ~/dbom
-echo "alias dbom='just --justfile ~/dbom/Justfile'" >> ~/.bashrc
+git clone https://github.com/makoto-project/makoto-cli.git ~/makoto-cli
+echo "alias makoto-cli='just --justfile ~/makoto-cli/Justfile'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
 ## Recipes
 
 ```
-$ dbom
+$ makoto-cli
 Available recipes:
     default                                            # List available recipes
     fetch sources=(data_dir / "external/sources.yaml") # Fetch external datasets listed in sources.yaml
@@ -40,19 +40,19 @@ Available recipes:
 
 ```bash
 # Generate an origin attestation + DBOM for a CSV file
-dbom generate data/my-dataset.csv
+makoto-cli generate data/my-dataset.csv
 
 # Validate all DBOMs
-dbom validate-all
+makoto-cli validate-all
 
 # Run the full gate pipeline (fetch → auto-generate → validate)
-dbom gate
+makoto-cli gate
 
 # Show lineage for a dataset
-dbom lineage dboms/my-dataset.dbom.json
+makoto-cli lineage dboms/my-dataset.dbom.json
 
 # Show status of all data assets
-dbom status
+makoto-cli status
 ```
 
 ## What It Produces
@@ -66,7 +66,7 @@ dbom status
   "predicateType": "https://makoto.dev/origin/v1",
   "predicate": {
     "origin": { "source": "file://data/my-dataset.csv", "sourceType": "file" },
-    "collector": { "id": "https://github.com/makoto-project/dbom" },
+    "collector": { "id": "https://github.com/makoto-project/makoto-cli" },
     "schema": { "format": "csv" }
   }
 }
@@ -89,7 +89,7 @@ The test suite lives in `tests/` and covers all 16 recipes with isolated temp di
 
 ```bash
 # Run all tests
-dbom test
+makoto-cli test
 
 # Or directly
 just --justfile tests/Justfile all

@@ -1,13 +1,13 @@
 # makoto-cli
 
-A CLI toolkit for generating, validating, and managing [Makoto](https://usemakoto.dev) **Data Bills of Materials (DBOMs)** — signed attestations that prove where your data came from and how it was transformed.
+A CLI toolkit for generating, validating, and managing [Makoto](https://usemakoto.dev) **Data Bills of Materials (DBOMs)** — provenance records that prove where your data came from and how it was transformed.
 
-Built as a [Justfile](https://github.com/casey/just) following the [makoto-project/justfiles](https://github.com/makoto-project/justfiles) pattern: clone it, alias it, use it from anywhere.
+Built as a [Justfile](https://github.com/casey/just) following the [makoto-project/justfiles](https://github.com/makoto-project/justfiles) pattern: clone it, alias it, use it from anywhere. Under the hood, every recipe delegates to the [Makoto Python SDK](https://usemakoto.dev/sdk/python/) (`makoto` on PyPI/git).
 
 ## Install
 
 ```bash
-# Prerequisites: just, python3
+# Prerequisites: just, python3, pip
 # macOS
 brew install just
 
@@ -15,7 +15,14 @@ brew install just
 git clone https://github.com/makoto-project/makoto-cli.git ~/makoto-cli
 echo "alias makoto-cli='just --justfile ~/makoto-cli/Justfile'" >> ~/.bashrc
 source ~/.bashrc
+
+# Install the Makoto Python SDK (one-time)
+makoto-cli install
 ```
+
+`makoto-cli install` runs `pip install -r requirements.txt`, which pulls the
+[`makoto`](https://usemakoto.dev/sdk/python/) Python SDK from the
+`makoto-project/usemakoto.dev` repository.
 
 ## Recipes
 
@@ -25,12 +32,13 @@ Available recipes:
     default                                            # List available recipes
     fetch sources=(data_dir / "external/sources.yaml") # Fetch external datasets listed in sources.yaml
     gate mode="both"                                   # Run the full gate pipeline: discover → fetch → [auto-generate] → validate
-    generate file *args                                # Generate origin attestation + DBOM for a data file
+    generate file *args                                # Generate a Makoto DBOM (v0.1) for a data file
     generate-all                                       # Generate DBOMs for all data assets missing one
+    install                                            # Install the Makoto Python SDK and any other dependencies
     lineage file                                       # Show DBOM lineage chain for an asset
-    schema-check                                       # Validate the DBOM JSON schemas (requires jsonschema)
+    schema-check                                       # Validate the bundled DBOM JSON schema (requires python stdlib only)
     status                                             # Show summary table of all assets and their DBOM status
-    transform file *args                               # Transform a dataset and update DBOM lineage
+    transform file *args                               # Transform a dataset and write a new DBOM with chained lineage
     validate file                                      # Validate a single DBOM
     validate-all                                       # Validate all DBOMs in the dboms/ directory
     test                                               # Run the test suite
@@ -39,7 +47,7 @@ Available recipes:
 ## Quick Start
 
 ```bash
-# Generate an origin attestation + DBOM for a CSV file
+# Generate a DBOM for a CSV file
 makoto-cli generate data/my-dataset.csv
 
 # Validate all DBOMs
@@ -53,39 +61,50 @@ makoto-cli lineage dboms/my-dataset.dbom.json
 
 # Show status of all data assets
 makoto-cli status
+
+# Transform a dataset and chain the lineage in the new DBOM
+makoto-cli transform data/my-dataset.csv --column value --operator '>' --value 100
 ```
 
 ## What It Produces
 
-### Origin Attestation (in-toto Statement v1)
+A single, self-contained **Makoto DBOM (v0.1)** per asset, conforming to
+[`https://usemakoto.dev/schema/v0.1.json`](https://usemakoto.dev/schema/v0.1.json):
 
 ```json
 {
-  "_type": "https://in-toto.io/Statement/v1",
-  "subject": [{ "name": "dataset:my-dataset", "digest": { "sha256": "abc123..." } }],
-  "predicateType": "https://makoto.dev/origin/v1",
-  "predicate": {
-    "origin": { "source": "file://data/my-dataset.csv", "sourceType": "file" },
-    "collector": { "id": "https://github.com/makoto-project/makoto-cli" },
-    "schema": { "format": "csv" }
-  }
+  "schema_version": "0.1",
+  "id": "dbom-3f2c8a4b-...",
+  "created_at": "2026-05-27T10:30:00Z",
+  "source": {
+    "uri": "file:///data/my-dataset.csv",
+    "hash": { "algorithm": "sha256", "value": "a1b2c3d4..." },
+    "format": "csv"
+  },
+  "signature": {
+    "algorithm": "sha256",
+    "value": "e5f6a7b8...",
+    "signer": "github:makoto-cli"
+  },
+  "lineage": [
+    {
+      "step": 1,
+      "description": "Direct ingestion (dataset version 1.0.0)",
+      "tool": "makoto-cli (https://github.com/makoto-project/makoto-cli)",
+      "input_hash": "n/a",
+      "output_hash": "a1b2c3d4..."
+    }
+  ]
 }
 ```
 
-### DBOM Document
-
-```json
-{
-  "dbomVersion": "1.0.0",
-  "dataset": { "name": "my-dataset", "version": "1.0.0", "makotoLevel": "L1" },
-  "sources": [{ "name": "my-dataset", "attestationRef": "attestations/my-dataset.origin.json" }],
-  "transformations": []
-}
-```
+`transform` recipes append additional `lineage[]` steps, so the chain travels
+with the data.
 
 ## Testing
 
-The test suite lives in `tests/` and covers all 16 recipes with isolated temp directories per test:
+The test suite lives in `tests/` and covers all recipes with isolated temp
+directories per test:
 
 ```bash
 # Run all tests
@@ -95,7 +114,10 @@ makoto-cli test
 just --justfile tests/Justfile all
 ```
 
-Tests include: generate (CSV + JSON), validate (single + all), generate-all (skip existing), fetch, transform, status, lineage, gate (both + gate-only), tampered hash detection, schema validation, and missing-DBOM gating.
+Tests include: generate (CSV + JSON), validate (single + all), generate-all
+(skip existing), fetch, transform with chained lineage, status, lineage,
+gate (both + gate-only), tampered hash detection, schema validation, and
+missing-DBOM gating.
 
 ## GitHub Action
 
@@ -119,8 +141,8 @@ Override defaults via environment variables:
 |----------|---------|-------------|
 | `DBOM_DATA_DIR` | `./data` | Data directory to scan |
 | `DBOM_DBOMS_DIR` | `./dboms` | Output directory for DBOMs |
-| `DBOM_ATTESTATIONS_DIR` | `./attestations` | Output directory for attestations |
 | `DBOM_PYTHON` | `python3` | Python interpreter |
+| `MAKOTO_SIGNER` | `github:makoto-cli` | Default signer identity recorded in `signature.signer` |
 
 ## Makoto Levels
 
@@ -131,6 +153,24 @@ This toolkit targets **Makoto L1** (Provenance Exists). See [usemakoto.dev/spec]
 | **L1** | Provenance Exists | ✓ Implemented |
 | **L2** | Authentic Provenance (signed) | Roadmap |
 | **L3** | Unforgeable Provenance (hardware-backed) | Future |
+
+## Architecture
+
+```
+makoto-cli
+├── Justfile              # CLI entrypoint (just recipes)
+├── requirements.txt      # Pins the makoto SDK
+├── schema/v0.1.json      # Bundled DBOM schema (mirrors the SDK's)
+├── scripts/              # Thin wrappers around `makoto.generate()` / `makoto.verify()`
+│   ├── generate_dbom.py
+│   ├── validate_dbom.py
+│   ├── transform_data.py
+│   ├── fetch_data.py
+│   ├── status.py
+│   └── lineage.py
+├── tests/                # Justfile-driven integration tests
+└── .github/actions/      # Composite GitHub Action
+```
 
 ## License
 

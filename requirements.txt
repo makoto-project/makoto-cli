@@ -1,0 +1,5 @@
+# Makoto Python SDK (https://usemakoto.dev/sdk/python/)
+# Until published to PyPI, install from the makoto-project/usemakoto.dev repo.
+# For local development against a checkout, use:
+#   pip install -e ../usemakoto.dev/sdk/python
+makoto @ git+https://github.com/makoto-project/usemakoto.dev.git#subdirectory=sdk/python

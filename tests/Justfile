@@ -49,7 +49,7 @@ mkenv name:
     #!/usr/bin/env bash
     dir="/tmp/makoto-cli-test-{{name}}"
     rm -rf "$dir"
-    mkdir -p "$dir/data/local" "$dir/data/external" "$dir/dboms" "$dir/attestations"
+    mkdir -p "$dir/data/local" "$dir/data/external" "$dir/dboms"
     echo "$dir"
 
 # --- Tests ---
@@ -65,21 +65,21 @@ test-default:
         echo "  ✗ fail — missing expected recipes"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
 
-# T02: generate origin attestation + DBOM for a CSV
+# T02: generate DBOM for a CSV
 test-generate:
     #!/usr/bin/env bash
     echo "▸ test-generate: single CSV file"
     dir=$(just --justfile {{root}}/Justfile mkenv generate)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
-    if [ ! -f "$dir/attestations/test-data.origin.json" ] || [ ! -f "$dir/dboms/test-data.dbom.json" ]; then
-        echo "  ✗ fail — output files missing"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+    if [ ! -f "$dir/dboms/test-data.dbom.json" ]; then
+        echo "  ✗ fail — DBOM file missing"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
         rm -rf "$dir"; exit 0
     fi
-    if {{python}} {{helpers}}/check_structure.py "$dir/attestations/test-data.origin.json" "$dir/dboms/test-data.dbom.json" > /dev/null 2>&1; then
+    if {{python}} {{helpers}}/check_structure.py "$dir/dboms/test-data.dbom.json" > /dev/null 2>&1; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
-        echo "  ✗ fail — invalid in-toto/DBOM structure"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — invalid v0.1 DBOM structure"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
     rm -rf "$dir"
 
@@ -165,29 +165,29 @@ test-generate-external:
     cp {{fixtures}}/sources.yaml "$dir/data/external/"
     cd "$dir" && just --justfile {{makoto_cli}} fetch > /dev/null 2>&1
     cd "$dir" && just --justfile {{makoto_cli}} generate data/external/iris.csv > /dev/null 2>&1
-    if [ -f "$dir/dboms/iris.dbom.json" ] && [ -f "$dir/attestations/iris.origin.json" ]; then
+    if [ -f "$dir/dboms/iris.dbom.json" ]; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
-        echo "  ✗ fail — DBOM/attestation not created for iris"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — DBOM not created for iris"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
     rm -rf "$dir"
 
-# T09: transform a dataset
+# T09: transform a dataset (lineage chained)
 test-transform:
     #!/usr/bin/env bash
-    echo "▸ test-transform: dataset transformation"
+    echo "▸ test-transform: dataset transformation with chained lineage"
     dir=$(just --justfile {{root}}/Justfile mkenv transform)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
     cd "$dir" && just --justfile {{makoto_cli}} transform data/local/test-data.csv > /dev/null 2>&1
-    if [ -f "$dir/attestations/test-data_filtered.transform.json" ]; then
-        if {{python}} {{helpers}}/check_transform.py "$dir/attestations/test-data_filtered.transform.json" > /dev/null 2>&1; then
+    if [ -f "$dir/dboms/test-data_filtered.dbom.json" ]; then
+        if {{python}} {{helpers}}/check_transform.py "$dir/dboms/test-data_filtered.dbom.json" > /dev/null 2>&1; then
             echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
         else
-            echo "  ✗ fail — invalid transform attestation"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+            echo "  ✗ fail — transformed DBOM lineage not chained"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
         fi
     else
-        echo "  ✗ fail — transform attestation not created"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — transformed DBOM not created"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
     rm -rf "$dir"
 
@@ -215,10 +215,10 @@ test-lineage:
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
     output=$(cd "$dir" && just --justfile {{makoto_cli}} lineage dboms/test-data.dbom.json 2>&1)
-    if echo "$output" | grep -q "origin: dataset:test-data"; then
+    if echo "$output" | grep -q "Lineage" && echo "$output" | grep -q "Direct ingestion"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
-        echo "  ✗ fail — lineage missing origin entry"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — lineage output missing expected content"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
     rm -rf "$dir"
 
@@ -255,20 +255,20 @@ test-gate-only:
     fi
     rm -rf "$dir"
 
-# T14: validate detects tampered hash
+# T14: validate detects tampered data file
 test-validate-tampered:
     #!/usr/bin/env bash
-    echo "▸ test-validate-tampered: detect hash mismatch"
+    echo "▸ test-validate-tampered: detect data hash mismatch"
     dir=$(just --justfile {{root}}/Justfile mkenv tampered)
     cp {{fixtures}}/test-data.csv "$dir/data/local/"
     cd "$dir" && just --justfile {{makoto_cli}} generate data/local/test-data.csv > /dev/null 2>&1
-    {{python}} {{helpers}}/tamper_hash.py "$dir/attestations/test-data.origin.json" > /dev/null
+    {{python}} {{helpers}}/tamper_data.py "$dir/data/local/test-data.csv" > /dev/null
     output=$(cd "$dir" && just --justfile {{makoto_cli}} validate dboms/test-data.dbom.json 2>&1)
     exit_code=$?
-    if [ $exit_code -ne 0 ] && echo "$output" | grep -q "sha256 mismatch"; then
+    if [ $exit_code -ne 0 ] && echo "$output" | grep -qi "hash mismatch"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
-        echo "  ✗ fail — should detect tampered hash (exit=$exit_code)"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — should detect tampered data (exit=$exit_code)"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
     rm -rf "$dir"
 
@@ -277,10 +277,10 @@ test-schema-check:
     #!/usr/bin/env bash
     echo "▸ test-schema-check: validate JSON schemas"
     output=$(just --justfile {{makoto_cli}} schema-check 2>&1)
-    if echo "$output" | grep -q "dbom.schema.json" && echo "$output" | grep -q "origin.schema.json" && echo "$output" | grep -q "transform.schema.json"; then
+    if echo "$output" | grep -q "v0.1.json"; then
         echo "  ✓ pass"; echo $(( $(cat {{pass_marker}}) + 1 )) > {{pass_marker}}
     else
-        echo "  ✗ fail — not all schemas checked"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
+        echo "  ✗ fail — schema-check did not report v0.1.json"; echo $(( $(cat {{fail_marker}}) + 1 )) > {{fail_marker}}
     fi
 
 # T16: gate mode=gate fails when asset missing DBOM

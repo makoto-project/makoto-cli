@@ -10,7 +10,6 @@ scripts := root / "scripts"
 # Default directories (can be overridden via env vars)
 data_dir := env("DBOM_DATA_DIR", invdir / "data")
 dboms_dir := env("DBOM_DBOMS_DIR", invdir / "dboms")
-attestations_dir := env("DBOM_ATTESTATIONS_DIR", invdir / "attestations")
 
 # Python interpreter
 python := env("DBOM_PYTHON", "python3")
@@ -21,21 +20,20 @@ default:
 
 # --- Schema ---
 
-# Validate the DBOM JSON schemas (requires jsonschema)
+# Validate the bundled DBOM JSON schema (requires python stdlib only)
 schema-check:
     @echo "Checking schemas..."
-    @for f in {{root}}/schema/*.schema.json; do \
+    @for f in {{root}}/schema/*.json; do \
         {{python}} -c "import json; json.load(open('$f'))" && echo "  ✓ $f" || echo "  ✗ $f"; \
     done
 
 # --- Generate ---
 
-# Generate origin attestation + DBOM for a data file
+# Generate a Makoto DBOM (v0.1) for a data file
 generate file *args:
     #!/usr/bin/env bash
     cd "{{invdir}}"
     {{python}} {{scripts}}/generate_dbom.py {{file}} \
-        --attestations-dir {{attestations_dir}} \
         --dboms-dir {{dboms_dir}} \
         {{args}}
 
@@ -49,7 +47,6 @@ generate-all:
         if [ ! -f "{{dboms_dir}}/${name}.dbom.json" ]; then
             echo "Generating DBOM for ${f}..."
             {{python}} {{scripts}}/generate_dbom.py "$f" \
-                --attestations-dir {{attestations_dir}} \
                 --dboms-dir {{dboms_dir}}
             found=$((found + 1))
         fi
@@ -85,12 +82,12 @@ fetch sources=(data_dir / "external/sources.yaml"):
 
 # --- Transform ---
 
-# Transform a dataset and update DBOM lineage
+# Transform a dataset and write a new DBOM with chained lineage
 transform file *args:
     #!/usr/bin/env bash
     cd "{{invdir}}"
     {{python}} {{scripts}}/transform_data.py {{file}} \
-        --attestations-dir {{attestations_dir}} \
+        --dboms-dir {{dboms_dir}} \
         {{args}}
 
 # --- Gate ---
@@ -132,7 +129,6 @@ gate mode="both":
             if [ ! -f "{{dboms_dir}}/${name}.dbom.json" ]; then
                 echo "Generating DBOM for ${f}..."
                 {{python}} {{scripts}}/generate_dbom.py "$f" \
-                    --attestations-dir {{attestations_dir}} \
                     --dboms-dir {{dboms_dir}}
                 gen_found=$((gen_found + 1))
             fi
@@ -189,3 +185,9 @@ status:
 # Run the test suite
 test:
     @just --justfile {{root}}/tests/Justfile all
+
+# --- Install ---
+
+# Install the Makoto Python SDK and any other dependencies
+install:
+    {{python}} -m pip install -r {{root}}/requirements.txt
